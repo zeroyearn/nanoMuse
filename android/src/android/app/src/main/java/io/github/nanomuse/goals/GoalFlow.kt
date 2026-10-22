@@ -126,6 +126,7 @@ object GoalFlow {
     private val setupScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     private suspend fun setUpGoal(context: Context, goal: Goal, firstCheck: String) {
+        if (io.github.nanomuse.remote.HermesRemoteMode.isRemote(context)) return
         try {
             val app = context.applicationContext as MinisApp
             val sessionId: String? = GoalSessions.create(app, goal.title)

@@ -31,6 +31,10 @@ import kotlinx.coroutines.withTimeout
 class ScheduledTaskAlarmReceiver : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent) {
+        if (io.github.nanomuse.remote.HermesRemoteMode.isRemote(context)) {
+            AppLogger.info(TAG, "Hermes remote mode active — skipping local scheduled task fire")
+            return
+        }
         if (intent.action != ScheduledTaskManager.ACTION_FIRE) return
         val taskId = intent.getStringExtra(ScheduledTaskManager.EXTRA_TASK_ID) ?: return
 

@@ -556,7 +556,9 @@ class MinisApp : Application(), ImageLoaderFactory {
         // nanoMuse: nanomuse-pc — the phone drives the user's other devices (shell, files, browser, screen, tasks).
         NativeOffloadServer.register("nanomuse-pc", io.github.nanomuse.reach.ReachOffloadHandler(this))
         // nanoMuse: join the hub, so the user's other devices can reach this phone and it can reach them.
-        io.github.nanomuse.hub.Hub.autoStart(this)
+        if (!io.github.nanomuse.remote.HermesRemoteMode.isRemote(this)) {
+            io.github.nanomuse.hub.Hub.autoStart(this)
+        }
         // T-config: minis-config — agent-facing settings management
         // (read/write registered ConfigFields with audit + revert).
         // Mirrors iOS `config_offload_register()` in ISHKernel.m.
@@ -657,13 +659,16 @@ class MinisApp : Application(), ImageLoaderFactory {
             configConfirmNotifier.cancel(it)
         }
         // nanoMuse: remembered approvals + the approval gate's background notification.
+        io.github.nanomuse.remote.HermesRemoteMode.init(this)
         io.github.nanomuse.guard.Grants.init(this)
         io.github.nanomuse.feed.FeedFlow.init(this) // nanoMuse
         io.github.nanomuse.chat.RoutineWakes.init(this) // nanoMuse: which chat rows a routine sent
         io.github.nanomuse.avatar.AvatarStore.init(this) // nanoMuse: the user's own face, if any
         io.github.nanomuse.cloud.ProfileSync.init(this) // nanoMuse: the name and face the account's devices share
         io.github.nanomuse.account.AccountData.init(this) // nanoMuse: whose chat is whose (contract C12)
-        io.github.nanomuse.sync.ConversationSync.init(this) // nanoMuse: the conversations, the same on every device
+        if (!io.github.nanomuse.remote.HermesRemoteMode.isRemote(this)) {
+            io.github.nanomuse.sync.ConversationSync.init(this) // nanoMuse: the conversations, the same on every device
+        }
         io.github.nanomuse.avatar.AvatarStudio.init(this) // nanoMuse: the feed's files and its built-in routine
         val nmRiskNotifier = io.github.nanomuse.guard.RiskApprovalNotifier(this, ::isAppForeground)
         io.github.nanomuse.guard.RiskGate.backgroundNotifier = { nmRiskNotifier.notifyIfBackgrounded(it) }

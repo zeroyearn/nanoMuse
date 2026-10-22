@@ -33,7 +33,14 @@ android {
     compileSdk = 36
     // nanoMuse: pin the NDK this repository is built and released with (r27c);
     // deps/build_proot.sh uses the same one through ANDROID_NDK_HOME.
-    ndkVersion = "27.2.12479018"
+    val hasNdk = file("../../../../share/android-commandlinetools/ndk/27.2.12479018/source.properties").exists() ||
+        file("${rootProject.file("local.properties")}").readText().contains("ndk.dir") &&
+        file(Properties().apply { if (rootProject.file("local.properties").exists()) load(rootProject.file("local.properties").inputStream()) }.getProperty("ndk.dir", "") + "/source.properties").exists()
+    val enableNative = hasNdk && project.findProperty("nm.skipNative") != "true"
+
+    if (enableNative) {
+        ndkVersion = "27.2.12479018"
+    }
 
     // nanoMuse: release builds are signed with the project key when
     // android/keystore.properties exists (storeFile / storePassword / keyAlias /
@@ -76,18 +83,22 @@ android {
             abiFilters += listOf((project.findProperty("nm.abi") as String?) ?: "arm64-v8a")
         }
 
-        externalNativeBuild {
-            cmake {
-                cppFlags += "-std=c++17"
-                arguments += "-DANDROID_STL=c++_shared"
+        if (enableNative) {
+            externalNativeBuild {
+                cmake {
+                    cppFlags += "-std=c++17"
+                    arguments += "-DANDROID_STL=c++_shared"
+                }
             }
         }
     }
 
-    externalNativeBuild {
-        cmake {
-            path = file("src/main/cpp/CMakeLists.txt")
-            version = "3.22.1"
+    if (enableNative) {
+        externalNativeBuild {
+            cmake {
+                path = file("src/main/cpp/CMakeLists.txt")
+                version = "3.22.1"
+            }
         }
     }
 
@@ -281,7 +292,9 @@ dependencies {
     // `deps/build_rclone_android.sh` — the .aar is a build artifact under
     // app/libs/, not a checked-in binary. Backends are decided by
     // deps/rclone-mobile/backends/backends.go, shared with the iOS build.
-    implementation(group = "", name = "rclone", ext = "aar")
+    if (file("libs/rclone.aar").exists()) {
+        implementation(group = "", name = "rclone", ext = "aar")
+    }
 
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("com.squareup.okhttp3:okhttp-sse:4.12.0")

@@ -77,6 +77,7 @@ object FeedFlow {
     @Volatile private var lastWrittenAt = 0L
 
     fun init(context: Context) {
+        if (io.github.nanomuse.remote.HermesRemoteMode.isRemote(context)) return
         FeedStore.init(context)
         _introAcknowledged.value = prefs(context).getBoolean(KEY_INTRO_ACK, false)
         publishSession(prefs(context).getString(KEY_SESSION, null))
@@ -112,6 +113,7 @@ object FeedFlow {
      * whenever the Feed tab shows. A conversation the user deleted is recreated and re-bound.
      */
     suspend fun ensureRoutine(context: Context): ScheduledTask? {
+        if (io.github.nanomuse.remote.HermesRemoteMode.isRemote(context)) return null
         val app = context.applicationContext as? MinisApp ?: return null
         if (!app.subsystemsReady()) return null
         val manager = ScheduledTaskManager(app)
@@ -160,6 +162,7 @@ object FeedFlow {
     }
 
     private fun writeNow(context: Context, onDispatch: () -> Unit) {
+        if (io.github.nanomuse.remote.HermesRemoteMode.isRemote(context)) return
         if (_generating.value) return
         scope.launch {
             _generating.value = true

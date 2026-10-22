@@ -111,6 +111,17 @@ fun NanoMuseHome(
     mcpRepository: MCPRepository?,
 ) {
     val context = LocalContext.current
+    val backend by io.github.nanomuse.remote.HermesRemoteMode.backend.collectAsState()
+    if (backend == io.github.nanomuse.remote.AgentBackend.HERMES_REMOTE) {
+        HermesRemoteHome(
+            navController = navController,
+            onSwitchToLocal = {
+                io.github.nanomuse.remote.HermesRemoteMode.setBackend(context, io.github.nanomuse.remote.AgentBackend.OPENMINIS_LOCAL)
+            }
+        )
+        return
+    }
+
     val scope = rememberCoroutineScope()
     val focusManager = LocalFocusManager.current
 
