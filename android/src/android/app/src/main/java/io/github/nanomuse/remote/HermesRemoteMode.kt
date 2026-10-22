@@ -19,14 +19,18 @@ sealed class HermesConnectionState {
 }
 
 data class HermesConfig(
-    val gatewayUrl: String = DEFAULT_TAILSCALE_URL,
+    val gatewayUrl: String = DEFAULT_PUBLIC_URL,
+    val username: String = DEFAULT_USERNAME,
+    val password: String = DEFAULT_PASSWORD,
     val token: String = "",
-    val mainBotProfile: String = "default",
+    val mainBotProfile: String = "yunying-ducu",
     val autoConnect: Boolean = true
 ) {
     companion object {
-        const val DEFAULT_TAILSCALE_URL = "https://100.100.160.32:39443"
         const val DEFAULT_PUBLIC_URL = "https://129.225.181.45:39443"
+        const val DEFAULT_TAILSCALE_URL = "https://100.100.160.32:39443"
+        const val DEFAULT_USERNAME = "zeroyearn"
+        const val DEFAULT_PASSWORD = "ukCZmUHd_FMtkfrG_V_MfnAc.lC-04"
     }
 }
 
@@ -34,6 +38,8 @@ object HermesRemoteMode {
     private const val PREF_NAME = "hermes_remote_preferences"
     private const val KEY_BACKEND = "active_backend"
     private const val KEY_GATEWAY_URL = "gateway_url"
+    private const val KEY_USERNAME = "auth_username"
+    private const val KEY_PASSWORD = "auth_password"
     private const val KEY_TOKEN = "session_token"
     private const val KEY_MAIN_BOT = "main_bot_profile"
     private const val KEY_AUTO_CONNECT = "auto_connect"
@@ -74,9 +80,11 @@ object HermesRemoteMode {
     fun getConfig(context: Context): HermesConfig {
         val sp = prefs(context)
         return HermesConfig(
-            gatewayUrl = sp.getString(KEY_GATEWAY_URL, HermesConfig.DEFAULT_TAILSCALE_URL) ?: HermesConfig.DEFAULT_TAILSCALE_URL,
+            gatewayUrl = sp.getString(KEY_GATEWAY_URL, HermesConfig.DEFAULT_PUBLIC_URL) ?: HermesConfig.DEFAULT_PUBLIC_URL,
+            username = sp.getString(KEY_USERNAME, HermesConfig.DEFAULT_USERNAME) ?: HermesConfig.DEFAULT_USERNAME,
+            password = sp.getString(KEY_PASSWORD, HermesConfig.DEFAULT_PASSWORD) ?: HermesConfig.DEFAULT_PASSWORD,
             token = sp.getString(KEY_TOKEN, "") ?: "",
-            mainBotProfile = sp.getString(KEY_MAIN_BOT, "default") ?: "default",
+            mainBotProfile = sp.getString(KEY_MAIN_BOT, "yunying-ducu") ?: "yunying-ducu",
             autoConnect = sp.getBoolean(KEY_AUTO_CONNECT, true)
         )
     }
@@ -84,6 +92,8 @@ object HermesRemoteMode {
     fun saveConfig(context: Context, config: HermesConfig) {
         prefs(context).edit()
             .putString(KEY_GATEWAY_URL, config.gatewayUrl)
+            .putString(KEY_USERNAME, config.username)
+            .putString(KEY_PASSWORD, config.password)
             .putString(KEY_TOKEN, config.token)
             .putString(KEY_MAIN_BOT, config.mainBotProfile)
             .putBoolean(KEY_AUTO_CONNECT, config.autoConnect)

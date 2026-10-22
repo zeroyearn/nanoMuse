@@ -37,6 +37,7 @@ class HermesMuseRepository(private val context: Context) {
     }
 
     private val httpClient = io.github.nanomuse.remote.net.HermesHttpClient.newClient()
+    private val authManager = io.github.nanomuse.remote.auth.HermesAuthManager(context)
 
     private val _feedPosts = MutableStateFlow<List<FeedPost>>(emptyList())
     val feedPosts: StateFlow<List<FeedPost>> = _feedPosts.asStateFlow()
@@ -51,11 +52,13 @@ class HermesMuseRepository(private val context: Context) {
         val config = HermesRemoteMode.getConfig(context)
         val url = config.gatewayUrl.trimEnd('/') + "/api/plugins/hermes-muse/feed"
         try {
+            authManager.ensureAuthenticated()
             val reqBuilder = Request.Builder().url(url).get()
-            if (config.token.isNotBlank()) {
-                reqBuilder.addHeader("X-Hermes-Session-Token", config.token)
+            var resp = httpClient.newCall(reqBuilder.build()).execute()
+            if (resp.code == 401 || resp.code == 403) {
+                authManager.login()
+                resp = httpClient.newCall(reqBuilder.build()).execute()
             }
-            val resp = httpClient.newCall(reqBuilder.build()).execute()
             val body = resp.body?.string().orEmpty()
             if (resp.isSuccessful) {
                 val list = mutableListOf<FeedPost>()
@@ -99,11 +102,13 @@ class HermesMuseRepository(private val context: Context) {
         val config = HermesRemoteMode.getConfig(context)
         val url = config.gatewayUrl.trimEnd('/') + "/api/plugins/hermes-muse/ideas"
         try {
+            authManager.ensureAuthenticated()
             val reqBuilder = Request.Builder().url(url).get()
-            if (config.token.isNotBlank()) {
-                reqBuilder.addHeader("X-Hermes-Session-Token", config.token)
+            var resp = httpClient.newCall(reqBuilder.build()).execute()
+            if (resp.code == 401 || resp.code == 403) {
+                authManager.login()
+                resp = httpClient.newCall(reqBuilder.build()).execute()
             }
-            val resp = httpClient.newCall(reqBuilder.build()).execute()
             val body = resp.body?.string().orEmpty()
             if (resp.isSuccessful) {
                 val list = mutableListOf<Idea>()
@@ -146,11 +151,13 @@ class HermesMuseRepository(private val context: Context) {
         val config = HermesRemoteMode.getConfig(context)
         val url = config.gatewayUrl.trimEnd('/') + "/api/plugins/hermes-muse/goals"
         try {
+            authManager.ensureAuthenticated()
             val reqBuilder = Request.Builder().url(url).get()
-            if (config.token.isNotBlank()) {
-                reqBuilder.addHeader("X-Hermes-Session-Token", config.token)
+            var resp = httpClient.newCall(reqBuilder.build()).execute()
+            if (resp.code == 401 || resp.code == 403) {
+                authManager.login()
+                resp = httpClient.newCall(reqBuilder.build()).execute()
             }
-            val resp = httpClient.newCall(reqBuilder.build()).execute()
             val body = resp.body?.string().orEmpty()
             if (resp.isSuccessful) {
                 val list = mutableListOf<RemoteGoal>()

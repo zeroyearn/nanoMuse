@@ -140,6 +140,8 @@ fun HermesRemoteHome(
 
     // Initial connection & data sync
     LaunchedEffect(Unit) {
+        val authMgr = io.github.nanomuse.remote.auth.HermesAuthManager(context)
+        authMgr.ensureAuthenticated()
         gatewayClient.connect()
         botRepo.fetchMainBot()
         museRepo.fetchFeed()
@@ -657,25 +659,33 @@ fun HermesRemoteDrawer(
         HorizontalDivider()
         Spacer(Modifier.height(12.dp))
 
-        Text("Server & Gateway", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+        Text("Public Gateway & Auth", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
         Spacer(Modifier.height(4.dp))
         val drawerContext = androidx.compose.ui.platform.LocalContext.current
+        val drawerScope = rememberCoroutineScope()
         var currentCfg by remember { mutableStateOf(io.github.nanomuse.remote.HermesRemoteMode.getConfig(drawerContext)) }
-        Text(currentCfg.gatewayUrl, fontSize = 11.sp, color = Color.Gray, maxLines = 1)
-        Spacer(Modifier.height(6.dp))
+        Text("URL: ${currentCfg.gatewayUrl}", fontSize = 11.sp, color = Color.Gray, maxLines = 1)
+        Text("Account: ${currentCfg.username}", fontSize = 11.sp, color = Color.Gray)
+        Spacer(Modifier.height(8.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton(
+            Button(
                 onClick = {
-                    val newCfg = currentCfg.copy(gatewayUrl = io.github.nanomuse.remote.HermesConfig.DEFAULT_TAILSCALE_URL)
-                    io.github.nanomuse.remote.HermesRemoteMode.saveConfig(drawerContext, newCfg)
-                    currentCfg = newCfg
-                    onReconnect()
-                    Toast.makeText(drawerContext, "Switched to Tailscale URL", Toast.LENGTH_SHORT).show()
+                    drawerScope.launch {
+                        val authMgr = io.github.nanomuse.remote.auth.HermesAuthManager(drawerContext)
+                        val res = authMgr.login(currentCfg.username, currentCfg.password)
+                        if (res.isSuccess) {
+                            Toast.makeText(drawerContext, "Auth OK! Logged in as ${currentCfg.username}", Toast.LENGTH_SHORT).show()
+                            onReconnect()
+                        } else {
+                            Toast.makeText(drawerContext, "Auth failed: ${res.exceptionOrNull()?.message}", Toast.LENGTH_LONG).show()
+                        }
+                    }
                 },
                 modifier = Modifier.weight(1f),
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary),
                 contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp)
             ) {
-                Text("Tailscale", fontSize = 11.sp)
+                Text("Login / Refresh Auth", fontSize = 11.sp)
             }
             OutlinedButton(
                 onClick = {
@@ -683,12 +693,12 @@ fun HermesRemoteDrawer(
                     io.github.nanomuse.remote.HermesRemoteMode.saveConfig(drawerContext, newCfg)
                     currentCfg = newCfg
                     onReconnect()
-                    Toast.makeText(drawerContext, "Switched to Public IPv4", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(drawerContext, "Reset to Public IPv4", Toast.LENGTH_SHORT).show()
                 },
                 modifier = Modifier.weight(1f),
                 contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp)
             ) {
-                Text("Public IPv4", fontSize = 11.sp)
+                Text("Reset Public URL", fontSize = 11.sp)
             }
         }
 
