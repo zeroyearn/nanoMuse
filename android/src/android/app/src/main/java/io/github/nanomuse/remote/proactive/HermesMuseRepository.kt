@@ -36,10 +36,7 @@ class HermesMuseRepository(private val context: Context) {
         private val ISO_DAY = SimpleDateFormat("yyyy-MM-dd", Locale.US)
     }
 
-    private val httpClient = OkHttpClient.Builder()
-        .connectTimeout(15, TimeUnit.SECONDS)
-        .readTimeout(15, TimeUnit.SECONDS)
-        .build()
+    private val httpClient = io.github.nanomuse.remote.net.HermesHttpClient.newClient()
 
     private val _feedPosts = MutableStateFlow<List<FeedPost>>(emptyList())
     val feedPosts: StateFlow<List<FeedPost>> = _feedPosts.asStateFlow()

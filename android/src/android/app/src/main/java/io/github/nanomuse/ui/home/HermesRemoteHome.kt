@@ -41,6 +41,7 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.HorizontalDivider
@@ -649,6 +650,45 @@ fun HermesRemoteDrawer(
                 )
             ) {
                 Text(if (profile == currentProfile) "$profile (Current 👑)" else "Switch to $profile")
+            }
+        }
+
+        Spacer(Modifier.height(16.dp))
+        HorizontalDivider()
+        Spacer(Modifier.height(12.dp))
+
+        Text("Server & Gateway", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+        Spacer(Modifier.height(4.dp))
+        val drawerContext = androidx.compose.ui.platform.LocalContext.current
+        var currentCfg by remember { mutableStateOf(io.github.nanomuse.remote.HermesRemoteMode.getConfig(drawerContext)) }
+        Text(currentCfg.gatewayUrl, fontSize = 11.sp, color = Color.Gray, maxLines = 1)
+        Spacer(Modifier.height(6.dp))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(
+                onClick = {
+                    val newCfg = currentCfg.copy(gatewayUrl = io.github.nanomuse.remote.HermesConfig.DEFAULT_TAILSCALE_URL)
+                    io.github.nanomuse.remote.HermesRemoteMode.saveConfig(drawerContext, newCfg)
+                    currentCfg = newCfg
+                    onReconnect()
+                    Toast.makeText(drawerContext, "Switched to Tailscale URL", Toast.LENGTH_SHORT).show()
+                },
+                modifier = Modifier.weight(1f),
+                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp)
+            ) {
+                Text("Tailscale", fontSize = 11.sp)
+            }
+            OutlinedButton(
+                onClick = {
+                    val newCfg = currentCfg.copy(gatewayUrl = io.github.nanomuse.remote.HermesConfig.DEFAULT_PUBLIC_URL)
+                    io.github.nanomuse.remote.HermesRemoteMode.saveConfig(drawerContext, newCfg)
+                    currentCfg = newCfg
+                    onReconnect()
+                    Toast.makeText(drawerContext, "Switched to Public IPv4", Toast.LENGTH_SHORT).show()
+                },
+                modifier = Modifier.weight(1f),
+                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp)
+            ) {
+                Text("Public IPv4", fontSize = 11.sp)
             }
         }
 

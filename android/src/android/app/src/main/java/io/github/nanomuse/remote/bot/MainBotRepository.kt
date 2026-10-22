@@ -30,10 +30,7 @@ class MainBotRepository(private val context: Context) {
         private val JSON = "application/json; charset=utf-8".toMediaType()
     }
 
-    private val httpClient = OkHttpClient.Builder()
-        .connectTimeout(10, TimeUnit.SECONDS)
-        .readTimeout(10, TimeUnit.SECONDS)
-        .build()
+    private val httpClient = io.github.nanomuse.remote.net.HermesHttpClient.newClient()
 
     private val _botInfo = MutableStateFlow<MainBotInfo?>(null)
     val botInfo: StateFlow<MainBotInfo?> = _botInfo.asStateFlow()

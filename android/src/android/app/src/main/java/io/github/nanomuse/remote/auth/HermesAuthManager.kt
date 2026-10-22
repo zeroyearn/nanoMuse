@@ -19,10 +19,7 @@ class HermesAuthManager(private val context: Context) {
         private val JSON = "application/json; charset=utf-8".toMediaType()
     }
 
-    private val httpClient = OkHttpClient.Builder()
-        .connectTimeout(15, TimeUnit.SECONDS)
-        .readTimeout(15, TimeUnit.SECONDS)
-        .build()
+    private val httpClient = io.github.nanomuse.remote.net.HermesHttpClient.newClient()
 
     private var cachedCookie: String? = null
 

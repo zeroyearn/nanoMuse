@@ -31,10 +31,7 @@ class HermesGatewayClient(private val context: Context) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val nextRpcId = AtomicLong(1)
 
-    private val httpClient = OkHttpClient.Builder()
-        .readTimeout(0, TimeUnit.MILLISECONDS) // WS keeps alive
-        .pingInterval(20, TimeUnit.SECONDS)
-        .build()
+    private val httpClient = HermesHttpClient.newClient(isWebSocket = true)
 
     private var webSocket: WebSocket? = null
     private var isIntentionalClose = false

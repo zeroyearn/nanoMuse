@@ -19,11 +19,16 @@ sealed class HermesConnectionState {
 }
 
 data class HermesConfig(
-    val gatewayUrl: String = "http://100.100.160.32:8000",
+    val gatewayUrl: String = DEFAULT_TAILSCALE_URL,
     val token: String = "",
     val mainBotProfile: String = "default",
     val autoConnect: Boolean = true
-)
+) {
+    companion object {
+        const val DEFAULT_TAILSCALE_URL = "https://100.100.160.32:39443"
+        const val DEFAULT_PUBLIC_URL = "https://129.225.181.45:39443"
+    }
+}
 
 object HermesRemoteMode {
     private const val PREF_NAME = "hermes_remote_preferences"
@@ -69,7 +74,7 @@ object HermesRemoteMode {
     fun getConfig(context: Context): HermesConfig {
         val sp = prefs(context)
         return HermesConfig(
-            gatewayUrl = sp.getString(KEY_GATEWAY_URL, "http://100.100.160.32:8000") ?: "http://100.100.160.32:8000",
+            gatewayUrl = sp.getString(KEY_GATEWAY_URL, HermesConfig.DEFAULT_TAILSCALE_URL) ?: HermesConfig.DEFAULT_TAILSCALE_URL,
             token = sp.getString(KEY_TOKEN, "") ?: "",
             mainBotProfile = sp.getString(KEY_MAIN_BOT, "default") ?: "default",
             autoConnect = sp.getBoolean(KEY_AUTO_CONNECT, true)
