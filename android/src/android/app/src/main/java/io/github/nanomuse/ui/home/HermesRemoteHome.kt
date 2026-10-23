@@ -10,8 +10,11 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -122,6 +125,7 @@ fun HermesRemoteHome(
 
     val connState by HermesRemoteMode.connectionState.collectAsState()
     val mainBotProfile by HermesRemoteMode.currentMainBot.collectAsState()
+    val currentModel by HermesRemoteMode.currentModel.collectAsState()
     val botInfo by botRepo.botInfo.collectAsState()
 
     val messages by sessionRepo.messages.collectAsState()
@@ -172,6 +176,7 @@ fun HermesRemoteHome(
             ) {
                 HermesRemoteDrawer(
                     currentProfile = mainBotProfile,
+                    currentModel = currentModel,
                     connState = connState,
                     botInfo = botInfo,
                     onSwitchProfile = { target ->
@@ -179,6 +184,13 @@ fun HermesRemoteHome(
                             botRepo.switchMainBot(target, "Switched via Hermes Android App")
                             gatewayClient.createSession(target)
                             sessionRepo.clearMessages()
+                        }
+                    },
+                    onSwitchModel = { targetModel ->
+                        scope.launch {
+                            HermesRemoteMode.setCurrentModel(context, targetModel)
+                            sessionRepo.sendMessage("/model $targetModel")
+                            Toast.makeText(context, "Switching model to: $targetModel", Toast.LENGTH_SHORT).show()
                         }
                     },
                     onReconnect = { gatewayClient.connect() },
@@ -613,14 +625,28 @@ fun HermesRemoteGoalsView(
 @Composable
 fun HermesRemoteDrawer(
     currentProfile: String,
+    currentModel: String,
     connState: HermesConnectionState,
     botInfo: io.github.nanomuse.remote.bot.MainBotInfo?,
     onSwitchProfile: (String) -> Unit,
+    onSwitchModel: (String) -> Unit,
     onReconnect: () -> Unit,
     onSwitchToLocal: () -> Unit,
     onClose: () -> Unit
 ) {
-    Column(Modifier.fillMaxSize().padding(20.dp)) {
+    val scrollState = rememberScrollState()
+    val drawerContext = androidx.compose.ui.platform.LocalContext.current
+    val drawerScope = rememberCoroutineScope()
+    var currentCfg by remember { mutableStateOf(io.github.nanomuse.remote.HermesRemoteMode.getConfig(drawerContext)) }
+    var showCustomModelDialog by remember { mutableStateOf(false) }
+    var customModelInput by remember { mutableStateOf("") }
+
+    Column(
+        Modifier
+            .fillMaxSize()
+            .verticalScroll(scrollState)
+            .padding(20.dp)
+    ) {
         Text("Hermes Remote Control", fontSize = 20.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(6.dp))
         Text("Gateway Single Source of Truth", fontSize = 13.sp, color = Color.Gray)
@@ -628,6 +654,7 @@ fun HermesRemoteDrawer(
         HorizontalDivider()
         Spacer(Modifier.height(16.dp))
 
+        // 1. Active Main Bot
         Text("Active Main Bot", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
         Spacer(Modifier.height(4.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -640,15 +667,15 @@ fun HermesRemoteDrawer(
             Text("CAS Gen: ${it.generation} | Muse: ${if (it.museInstalled) "Installed" else "No"}", fontSize = 12.sp, color = Color.Gray)
         }
 
-        Spacer(Modifier.height(20.dp))
+        Spacer(Modifier.height(16.dp))
         Text("Quick Switch Main Bot", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(6.dp))
         val candidateProfiles = listOf("yunying-ducu", "default", "yanshou", "toufang-qingbao")
         candidateProfiles.forEach { profile ->
             Button(
                 onClick = { onSwitchProfile(profile); onClose() },
                 enabled = profile != currentProfile,
-                modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp),
+                modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = if (profile == currentProfile) Color.LightGray else MaterialTheme.colorScheme.primary
                 )
@@ -659,13 +686,132 @@ fun HermesRemoteDrawer(
 
         Spacer(Modifier.height(16.dp))
         HorizontalDivider()
+        Spacer(Modifier.height(14.dp))
+
+        // 2. Model Route (大模型路由切换)
+        Text("Model Route (大模型路由)", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+        Spacer(Modifier.height(4.dp))
+        Surface(
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+            shape = RoundedCornerShape(8.dp),
+            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("当前模型: ", fontSize = 12.sp, color = Color.Gray)
+                Text(
+                    currentModel,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.primary,
+                    maxLines = 1
+                )
+            }
+        }
+        Spacer(Modifier.height(6.dp))
+
+        val candidateModels = listOf(
+            "gpt-6-luna" to "GPT-6 Luna (OpenAI Codex ⭐)",
+            "deepseek/deepseek-v4.1-flash" to "DeepSeek V4.1 Flash",
+            "deepseek/deepseek-v4-pro" to "DeepSeek V4 Pro",
+            "glm-5.3-flash" to "GLM 5.3 Flash",
+            "kimi-k3" to "Moonshot Kimi K3",
+            "minimax-m3" to "MiniMax M3",
+            "anthropic/claude-sonnet-4" to "Claude Sonnet 4"
+        )
+
+        candidateModels.forEach { (modelId, label) ->
+            val isCurrent = currentModel == modelId
+            OutlinedButton(
+                onClick = {
+                    onSwitchModel(modelId)
+                    onClose()
+                },
+                modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                colors = ButtonDefaults.outlinedButtonColors(
+                    containerColor = if (isCurrent) MaterialTheme.colorScheme.primary.copy(alpha = 0.12f) else Color.Transparent
+                ),
+                border = BorderStroke(
+                    width = if (isCurrent) 1.5.dp else 1.dp,
+                    color = if (isCurrent) MaterialTheme.colorScheme.primary else Color.LightGray
+                )
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        label,
+                        fontSize = 12.sp,
+                        fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Normal,
+                        color = if (isCurrent) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                    )
+                    if (isCurrent) {
+                        Text("✓", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+
+        if (!showCustomModelDialog) {
+            OutlinedButton(
+                onClick = { showCustomModelDialog = true },
+                modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)
+            ) {
+                Text("✏️ 输入自定义模型...", fontSize = 12.sp)
+            }
+        } else {
+            Surface(
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+                shape = RoundedCornerShape(8.dp),
+                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
+            ) {
+                Column(Modifier.padding(8.dp)) {
+                    OutlinedTextField(
+                        value = customModelInput,
+                        onValueChange = { customModelInput = it },
+                        placeholder = { Text("如 openai/gpt-4o 或 deepseek-chat", fontSize = 11.sp) },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        textStyle = androidx.compose.ui.text.TextStyle(fontSize = 12.sp)
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                        Button(
+                            onClick = { showCustomModelDialog = false },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color.Gray),
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                        ) {
+                            Text("取消", fontSize = 11.sp)
+                        }
+                        Spacer(Modifier.width(6.dp))
+                        Button(
+                            onClick = {
+                                if (customModelInput.isNotBlank()) {
+                                    onSwitchModel(customModelInput.trim())
+                                    showCustomModelDialog = false
+                                    onClose()
+                                }
+                            },
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                        ) {
+                            Text("应用", fontSize = 11.sp)
+                        }
+                    }
+                }
+            }
+        }
+
+        Spacer(Modifier.height(16.dp))
+        HorizontalDivider()
         Spacer(Modifier.height(12.dp))
 
+        // 3. Public Gateway & Auth
         Text("Public Gateway & Auth", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
         Spacer(Modifier.height(4.dp))
-        val drawerContext = androidx.compose.ui.platform.LocalContext.current
-        val drawerScope = rememberCoroutineScope()
-        var currentCfg by remember { mutableStateOf(io.github.nanomuse.remote.HermesRemoteMode.getConfig(drawerContext)) }
         Text("URL: ${currentCfg.gatewayUrl}", fontSize = 11.sp, color = Color.Gray, maxLines = 1)
         Text("Account: ${currentCfg.username}", fontSize = 11.sp, color = Color.Gray)
         Spacer(Modifier.height(8.dp))
@@ -704,7 +850,7 @@ fun HermesRemoteDrawer(
             }
         }
 
-        Spacer(Modifier.weight(1f))
+        Spacer(Modifier.height(20.dp))
         HorizontalDivider()
         Spacer(Modifier.height(12.dp))
 

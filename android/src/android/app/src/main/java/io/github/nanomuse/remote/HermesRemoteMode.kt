@@ -42,6 +42,7 @@ object HermesRemoteMode {
     private const val KEY_PASSWORD = "auth_password"
     private const val KEY_TOKEN = "session_token"
     private const val KEY_MAIN_BOT = "main_bot_profile"
+    private const val KEY_ACTIVE_MODEL = "active_model"
     private const val KEY_AUTO_CONNECT = "auto_connect"
 
     private val _backend = MutableStateFlow(AgentBackend.HERMES_REMOTE)
@@ -52,6 +53,9 @@ object HermesRemoteMode {
 
     private val _currentMainBot = MutableStateFlow("default")
     val currentMainBot: StateFlow<String> = _currentMainBot.asStateFlow()
+
+    private val _currentModel = MutableStateFlow("gpt-6-luna")
+    val currentModel: StateFlow<String> = _currentModel.asStateFlow()
 
     private fun prefs(context: Context): SharedPreferences {
         return context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
@@ -66,6 +70,9 @@ object HermesRemoteMode {
 
         val bot = sp.getString(KEY_MAIN_BOT, "default") ?: "default"
         _currentMainBot.value = bot
+
+        val model = sp.getString(KEY_ACTIVE_MODEL, "gpt-6-luna") ?: "gpt-6-luna"
+        _currentModel.value = model
     }
 
     fun isRemote(context: Context): Boolean {
@@ -108,5 +115,10 @@ object HermesRemoteMode {
     fun setMainBotProfile(context: Context, profile: String) {
         _currentMainBot.value = profile
         prefs(context).edit().putString(KEY_MAIN_BOT, profile).apply()
+    }
+
+    fun setCurrentModel(context: Context, model: String) {
+        _currentModel.value = model
+        prefs(context).edit().putString(KEY_ACTIVE_MODEL, model).apply()
     }
 }
