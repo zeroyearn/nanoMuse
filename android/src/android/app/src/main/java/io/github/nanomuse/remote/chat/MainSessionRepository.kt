@@ -6,7 +6,9 @@ import io.github.nanomuse.remote.net.GatewayEvent
 import io.github.nanomuse.remote.net.HermesGatewayClient
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -43,6 +45,7 @@ class MainSessionRepository(
 ) {
     companion object {
         private const val TAG = "MainSessionRepository"
+        private const val TIMEOUT_MS = 60_000L
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
@@ -56,7 +59,8 @@ class MainSessionRepository(
     private val _activeApproval = MutableStateFlow<ActiveApproval?>(null)
     val activeApproval: StateFlow<ActiveApproval?> = _activeApproval.asStateFlow()
 
-    private var currentSessionId: String = "main-session"
+    private var currentSessionId: String? = null
+    private var streamingTimeoutJob: Job? = null
 
     init {
         scope.launch {
@@ -66,13 +70,56 @@ class MainSessionRepository(
         }
     }
 
+    private fun resetTimeout() {
+        streamingTimeoutJob?.cancel()
+        streamingTimeoutJob = scope.launch {
+            delay(TIMEOUT_MS)
+            if (_isStreaming.value) {
+                Log.w(TAG, "Streaming timed out after 60s")
+                _isStreaming.value = false
+                val list = _messages.value.toMutableList()
+                val last = list.lastOrNull()
+                if (last != null && last.isStreaming) {
+                    list[list.lastIndex] = last.copy(isStreaming = false)
+                    _messages.value = list
+                }
+            }
+        }
+    }
+
+    private fun cancelTimeout() {
+        streamingTimeoutJob?.cancel()
+        streamingTimeoutJob = null
+    }
+
     private fun handleGatewayEvent(event: GatewayEvent) {
         when (event) {
+            is GatewayEvent.SessionCreated -> {
+                Log.i(TAG, "Session created/bound: ${event.sessionId}")
+                currentSessionId = event.sessionId
+            }
             is GatewayEvent.Ready -> {
                 Log.i(TAG, "Gateway ready for profile: ${event.profile}")
             }
+            is GatewayEvent.MessageStart -> {
+                _isStreaming.value = true
+                resetTimeout()
+                val list = _messages.value.toMutableList()
+                val last = list.lastOrNull()
+                if (last == null || last.role != MessageRole.ASSISTANT || !last.isStreaming) {
+                    list.add(
+                        RemoteMessage(
+                            role = MessageRole.ASSISTANT,
+                            text = "",
+                            isStreaming = true
+                        )
+                    )
+                    _messages.value = list
+                }
+            }
             is GatewayEvent.ChatDelta -> {
                 _isStreaming.value = true
+                resetTimeout()
                 val list = _messages.value.toMutableList()
                 val last = list.lastOrNull()
                 if (last != null && last.role == MessageRole.ASSISTANT && last.isStreaming) {
@@ -88,22 +135,31 @@ class MainSessionRepository(
                 }
                 _messages.value = list
             }
-            is GatewayEvent.ChatMessage -> {
-                val role = when (event.role.lowercase()) {
-                    "user" -> MessageRole.USER
-                    "assistant" -> MessageRole.ASSISTANT
-                    "tool" -> MessageRole.TOOL
-                    else -> MessageRole.SYSTEM
-                }
+            is GatewayEvent.ThinkingDelta -> {
+                _isStreaming.value = true
+                resetTimeout()
+            }
+            is GatewayEvent.StatusUpdate -> {
                 val list = _messages.value.toMutableList()
-                val existingIndex = list.indexOfFirst { it.id == event.messageId }
-                if (existingIndex >= 0) {
-                    list[existingIndex] = list[existingIndex].copy(text = event.text, isStreaming = false)
-                } else {
+                val last = list.lastOrNull()
+                if (last != null && last.role == MessageRole.ASSISTANT && last.isStreaming) {
+                    val newText = if (last.text.isBlank()) event.text else "${last.text}\n${event.text}"
+                    list[list.lastIndex] = last.copy(text = newText)
+                    _messages.value = list
+                }
+            }
+            is GatewayEvent.ChatComplete -> {
+                cancelTimeout()
+                _isStreaming.value = false
+                val list = _messages.value.toMutableList()
+                val last = list.lastOrNull()
+                if (last != null && last.role == MessageRole.ASSISTANT) {
+                    val finalMsg = if (last.text.isBlank() && event.text.isNotBlank()) event.text else last.text
+                    list[list.lastIndex] = last.copy(text = finalMsg, isStreaming = false)
+                } else if (event.text.isNotBlank()) {
                     list.add(
                         RemoteMessage(
-                            id = event.messageId,
-                            role = role,
+                            role = MessageRole.ASSISTANT,
                             text = event.text,
                             isStreaming = false
                         )
@@ -111,21 +167,12 @@ class MainSessionRepository(
                 }
                 _messages.value = list
             }
-            is GatewayEvent.ChatComplete -> {
-                _isStreaming.value = false
-                val list = _messages.value.toMutableList()
-                val last = list.lastOrNull()
-                if (last != null && last.isStreaming) {
-                    list[list.lastIndex] = last.copy(isStreaming = false)
-                    _messages.value = list
-                }
-            }
             is GatewayEvent.ToolCall -> {
                 val list = _messages.value.toMutableList()
                 list.add(
                     RemoteMessage(
                         role = MessageRole.TOOL,
-                        text = "Running ${event.toolName}...",
+                        text = "Tool Call: ${event.toolName}",
                         toolName = event.toolName,
                         toolArgs = event.argsJson
                     )
@@ -146,33 +193,51 @@ class MainSessionRepository(
             is GatewayEvent.ApprovalRequest -> {
                 _activeApproval.value = ActiveApproval(event.approvalId, event.action, event.detail)
             }
-            is GatewayEvent.StatusChange -> {
-                Log.i(TAG, "Gateway status changed: ${event.status}")
+            is GatewayEvent.Error -> {
+                cancelTimeout()
+                _isStreaming.value = false
+                val list = _messages.value.toMutableList()
+                val last = list.lastOrNull()
+                if (last != null && last.role == MessageRole.ASSISTANT && last.isStreaming) {
+                    list[list.lastIndex] = last.copy(text = "${last.text}\n[Error: ${event.message}]", isStreaming = false, isError = true)
+                } else {
+                    list.add(
+                        RemoteMessage(
+                            role = MessageRole.SYSTEM,
+                            text = "Error: ${event.message}",
+                            isError = true
+                        )
+                    )
+                }
+                _messages.value = list
             }
         }
     }
 
-    fun sendMessage(text: String, attachmentIds: List<String> = emptyList()) {
+    fun sendMessage(text: String) {
         if (text.isBlank()) return
-        val userMsg = RemoteMessage(
-            role = MessageRole.USER,
-            text = text
-        )
-        _messages.value = _messages.value + userMsg
+        val list = _messages.value.toMutableList()
+        list.add(RemoteMessage(role = MessageRole.USER, text = text))
+        _messages.value = list
         _isStreaming.value = true
-        gatewayClient.submitPrompt(currentSessionId, text, attachmentIds)
+        resetTimeout()
+
+        gatewayClient.submitPrompt(currentSessionId, text)
     }
 
-    fun resolveApproval(approvalId: String, approved: Boolean) {
-        gatewayClient.resolveApproval(approvalId, approved)
-        if (_activeApproval.value?.id == approvalId) {
-            _activeApproval.value = null
-        }
+    fun resolveApproval(id: String, approved: Boolean) {
+        gatewayClient.resolveApproval(id, approved)
+        _activeApproval.value = null
+    }
+
+    fun resolveApproval(approved: Boolean) {
+        val current = _activeApproval.value ?: return
+        resolveApproval(current.id, approved)
     }
 
     fun clearMessages() {
         _messages.value = emptyList()
         _isStreaming.value = false
-        _activeApproval.value = null
+        cancelTimeout()
     }
 }

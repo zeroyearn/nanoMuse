@@ -177,6 +177,8 @@ fun HermesRemoteHome(
                     onSwitchProfile = { target ->
                         scope.launch {
                             botRepo.switchMainBot(target, "Switched via Hermes Android App")
+                            gatewayClient.createSession(target)
+                            sessionRepo.clearMessages()
                         }
                     },
                     onReconnect = { gatewayClient.connect() },
